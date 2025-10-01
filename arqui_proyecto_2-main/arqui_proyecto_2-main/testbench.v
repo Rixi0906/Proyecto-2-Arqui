@@ -1,6 +1,6 @@
 module test;
    reg cl = 0;
-   wire [3:0] alu_out_bus;
+   wire [7:0] alu_out_bus;
 
    computer Comp(.clk(cl), .alu_out_bus(alu_out_bus));
 

@@ -1,15 +1,10 @@
-module pc(clk, pc);
-   input clk;
-   output [3: 0] pc;
-
-   reg [3:0]     pc;
-   wire          clk;
-
-   initial begin
-	   pc = 0;
-   end
-
-   always @(posedge clk) begin
-	   pc <= pc + 1;
-   end
+// pc.v — Program Counter simple
+module pc #(parameter WIDTH = 8) (
+  input                  clk,
+  output reg [WIDTH-1:0] pc
+);
+  initial pc = {WIDTH{1'b0}};
+  always @(posedge clk) begin
+    pc <= pc + 1'b1;      // con WIDTH=4 cuenta 0..15 y se desborda a 0
+  end
 endmodule

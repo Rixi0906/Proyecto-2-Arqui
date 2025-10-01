@@ -1,4 +1,19 @@
-110000011
-101000110
-010010000
-001100000
+// --- Test 0: MOV ---
+// Instruction 1: MOV A, 42
+000001000101010
+// Instruction 2: MOV B, 123
+000001101111011
+
+// --- Test 1: ADD ---
+// Instruction 3: MOV A, 2
+000001000000010
+// Instruction 4: MOV B, 3
+000001100000011
+// Instruction 5: ADD A, B (A = A + B -> A = 2 + 3 = 5)
+000010000000000
+
+// --- Test 2: SHL ---
+// Instruction 6: MOV A, 5 (Overwrites A)
+000001000000101
+// Instruction 7: SHL A, A (A = A << 1 -> A = 5 * 2 = 10)
+001110000000000

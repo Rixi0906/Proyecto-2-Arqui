@@ -1,11 +1,11 @@
 module register(clk, data, load, out);
    input clk, load;
-   input [3:0] data;
-   output [3:0] out;
+   input [7:0] data;
+   output [7:0] out;
 
    wire         clk, load;
-   wire [3:0]   data;
-   reg [3:0]    out;
+   wire [7:0]   data;
+   reg [7:0]    out;
 
    initial begin
 	   out = 0;
