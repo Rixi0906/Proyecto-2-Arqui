@@ -4,7 +4,7 @@ module computer(
 );
 
   wire [7:0]  pc_out_bus;
-  pc #(.WIDTH(8)) PC(.clk(clk), .pc(pc_out_bus));  
+  pc #(.WIDTH(8)) pc_inst(.clk(clk), .pc(pc_out_bus));
   wire [14:0] im_out_bus;               
   wire [6:0]  opcode = im_out_bus[14:8];
   wire [7:0]  lit    = im_out_bus[7:0];
@@ -20,8 +20,6 @@ module computer(
   reg  SA;     
 
   wire use_lit = A | B;
-
-pc pc_inst(.clk(clk), .pc(pc_out_bus));
   instruction_memory IM(.address(pc_out_bus), .out(im_out_bus));
 
   always @(*) begin
