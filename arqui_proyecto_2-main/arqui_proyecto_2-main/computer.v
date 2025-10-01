@@ -1,11 +1,11 @@
 module computer(
   input        clk,
-  output [7:0] alu_out_bus  // <-- expuesto para el testbench
+  output [7:0] alu_out_bus  
 );
   // --- Programa / instrucción ---
   wire [7:0]  pc_out_bus;
-  pc #(.WIDTH(8)) PC(.clk(clk), .pc(pc_out_bus));  // PC cuenta 0..255
-  wire [14:0] im_out_bus;               // [14:8]=opcode (7) + [7:0]=lit (8)
+  pc #(.WIDTH(8)) PC(.clk(clk), .pc(pc_out_bus));  
+  wire [14:0] im_out_bus;               
   wire [6:0]  opcode = im_out_bus[14:8];
   wire [7:0]  lit    = im_out_bus[7:0];
 
@@ -138,20 +138,41 @@ pc pc_inst(.clk(clk), .pc(pc_out_bus));
         LB = 1'b1;
       end
 
-      // ===== SHL / SHR =====
+      7'b0010101: begin // NOT A,B  => A := ~B
+        LA = 1'b1; SA = 1'b1;
+      end
+      7'b0010110: begin // NOT B,A  => B := ~A
+        LB = 1'b1; SA = 1'b1;
+      end
+
+      // ===== SHL =====
       7'b0011100: begin // SHL A
         LA = 1'b1; SA = 1'b1;
+      end      
+      7'b0011101: begin // SHL A,B  => A := B << 1
+        LA = 1'b1; SA = 1'b1;
+      end
+      7'b0011110: begin // SHL B,A  => B := A << 1
+        LB = 1'b1; SA = 1'b1;
       end
       7'b0011111: begin // SHL B
         LB = 1'b1;
       end
+
+      // ===== SHR =====
       7'b0100000: begin // SHR A
         LA = 1'b1; SA = 1'b1;
+      end      
+      7'b0100001: begin // SHR A,B  => A := B >> 1
+        LA = 1'b1; SA = 1'b1;
+      end
+      7'b0100010: begin // SHR B,A  => B := A >> 1
+        LB = 1'b1; SA = 1'b1;
       end
       7'b0100011: begin // SHR B
         LB = 1'b1;
       end
-
+      
       // ===== INC ===== (usa lit=1 en la instrucción)
       7'b0100100: begin // INC B = B + 1
         LB = 1'b1; B = 1'b1; // B usa Lit→1; ALU hace ADD
@@ -174,8 +195,8 @@ pc pc_inst(.clk(clk), .pc(pc_out_bus));
   // --- ALU ---
   ALU alu(
     .A(regA_out_bus),
-    .B(muxB_out_bus),   // aquí llega RegB o Lit según use_lit
-    .opcode(opcode),    // o traduce a alu_op si prefieres
+    .B(muxB_out_bus),   
+    .opcode(opcode),    
     .R(alu_out_bus),
     .Z(Z), .N(N), .C(C), .V(V)
   );

@@ -19,7 +19,7 @@ module test;
               $time, Comp.pc_out_bus, Comp.im_out_bus, Comp.regA_out_bus, Comp.regB_out_bus, alu_out_bus,
               Comp.im_out_bus[3:0]);
 
-     wait (Comp.PC.pc == 3);
+     wait (Comp.pc_out_bus == 8'd7);
      #2;
      $finish;
    end
