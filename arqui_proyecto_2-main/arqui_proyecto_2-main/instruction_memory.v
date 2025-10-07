@@ -1,11 +1,12 @@
-module instruction_memory(address, out);
-   input [7:0] address;
-   output [14:0] out;
+module instruction_memory(
+  input  [7:0]  address,
+  output [14:0] out
+);
+  reg [14:0] mem [0:255];
 
-   wire [7:0]   address;
-   wire [14:0]   out;
+  initial begin
+    $readmemb("im.dat", mem);
+  end
 
-   reg [14:0]    mem [0:255];
-
-   assign out = mem[address];
+  assign out = mem[address];
 endmodule
