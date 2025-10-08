@@ -3,19 +3,13 @@ module computer(
   output [7:0] alu_out_bus
 );
 
-  //  Señales internas
-
   wire [7:0]  pc_out_bus;
   wire [14:0] im_out_bus;
   wire [6:0]  opcode;
   wire [7:0]  lit;
-
   wire [7:0] regA_out_bus, regB_out_bus;
-
-  // ---- ALU inputs seleccionables ----
  
   reg        selA_is_B;
-
   reg  [1:0] selB;
 
   wire [7:0] aluA_in = selA_is_B ? regB_out_bus : regA_out_bus;
@@ -24,8 +18,6 @@ module computer(
       (selB==2'b10) ? lit :
       (selB==2'b01) ? regA_out_bus :
                       regB_out_bus;
-
-  // ---- Rutas de carga a A y B ----
   wire [7:0] path_ALU_to_A;
   wire [7:0] path_to_A;
 
@@ -47,19 +39,15 @@ module computer(
       (selWriteB==2'b10) ? lit           :
                            dmem_dout;
 
-  // Flags ALU 
+  // Flags
   wire Z, N, C, V;
   reg  Zr, Nr, Cr, Vr;
 
-  // Control
   reg  LA, LB;         
   reg  SA;             
   reg  SB;             
   reg  SB_ALU;         
 
-  //  PC e instrucción
-
-  // next PC para JMP/JEQ (usa pc.v con next_pc)
   wire [7:0] pc_plus1   = pc_out_bus + 8'd1;
   reg        take_jump;
   wire [7:0] jump_target = lit;   
@@ -79,9 +67,6 @@ module computer(
   assign opcode = im_out_bus[14:8];
   assign lit    = im_out_bus[7:0];
 
-
-  //  Data Memory (DM) 
-
   reg         dmem_we;   
   wire [7:0]  dmem_addr = lit;     
   wire [7:0]  dmem_din;
@@ -97,8 +82,6 @@ module computer(
     .din (dmem_din),
     .dout(dmem_dout)
   );
-
-  //  Mux A y registros
 
   assign path_ALU_to_A = alu_out_bus;
   assign path_to_A     = SA ? path_ALU_to_A : other_to_A;
@@ -117,9 +100,6 @@ module computer(
     .out(regB_out_bus)
   );
 
-
-  //  ALU
-
   ALU alu(
     .A(aluA_in),
     .B(aluB_in),
@@ -128,33 +108,26 @@ module computer(
     .Z(Z), .N(N), .C(C), .V(V)
   );
 
-  // Registrar flags para saltos condicionales 
   always @(posedge clk) begin
     Zr <= Z; Nr <= N; Cr <= C; Vr <= V;
   end
 
-
-  //  OpCodes (ajusta si usas otros)
-
   localparam [6:0]
-    // DMEM directos
     OP_MOV_A_DIR  = 7'b0100101,   
     OP_MOV_B_DIR  = 7'b0100110,   
     OP_MOV_DIR_A  = 7'b0100111,   
     OP_MOV_DIR_B  = 7'b0101000,   
-    // Aritmética con memoria
     OP_ADD_A_DIR  = 7'b0101100,   
     OP_ADD_B_DIR  = 7'b0101101,   
-    // Comparación y saltos
     OP_CMP_AB     = 7'b1001101,   
     OP_JMP        = 7'b1010000,   
     OP_JEQ        = 7'b1010100;   
 
 
-  //  Unidad de Control
+  
 
   always @* begin
-    // Defaults seguros
+    
     LA=0; LB=0;
     SA=0; SB=0; SB_ALU=0;
     selA_is_B=0; selB=2'b00;
@@ -165,7 +138,7 @@ module computer(
 
     case (opcode)
 
-      // ===== MOV =====
+      // MOV
       7'b0000010: begin // MOV A, Lit
         selOtherA = 2'b01; // lit
         SA = 1'b0; LA = 1'b1;
@@ -179,11 +152,11 @@ module computer(
         SA = 1'b0; LA = 1'b1;
       end
       7'b0000001: begin // MOV B, A
-        // esquema legado
+      
         SB = 1'b0; LB = 1'b1;
       end
 
-      // ===== ADD =====
+      // ADD
       7'b0000100: begin // ADD A, B  -> A=A+B
         selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
       end
@@ -197,7 +170,7 @@ module computer(
         selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
       end
 
-      // ===== SUB =====
+      // SUB
       7'b0001000: begin // SUB A, B
         selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
       end
@@ -211,7 +184,7 @@ module computer(
         selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
       end
 
-      // ===== AND =====
+      // AND
       7'b0001100: begin // AND A, B
         selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
       end
@@ -225,7 +198,7 @@ module computer(
         selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
       end
 
-      // ===== OR =====
+      // OR
       7'b0010000: begin // OR A, B
         selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
       end
@@ -239,7 +212,7 @@ module computer(
         selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
       end
 
-      // ===== NOT =====
+      // NOT
       7'b0010100: begin // NOT A, A
         selA_is_B = 1'b0; SA=1; LA=1;
       end
@@ -253,7 +226,7 @@ module computer(
         selA_is_B = 1'b1; SB_ALU=1; LB=1;
       end
 
-      // ===== XOR =====
+      // XOR
       7'b0011000: begin // XOR A, B
         selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
       end
@@ -267,7 +240,7 @@ module computer(
         selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
       end
 
-      // ===== SHL =====
+      // SHL
       7'b0011100: begin // SHL A, A
         selA_is_B = 1'b0; SA=1; LA=1;
       end
@@ -281,7 +254,7 @@ module computer(
         selA_is_B = 1'b1; SB_ALU=1; LB=1;
       end
 
-      // ===== SHR =====
+      // SHR
       7'b0100000: begin // SHR A, A
         selA_is_B = 1'b0; SA=1; LA=1;
       end
@@ -295,12 +268,12 @@ module computer(
         selA_is_B = 1'b1; SB_ALU=1; LB=1;
       end
 
-      // ===== INC B =====
+      // INC B
       7'b0100100: begin // INC B
         selA_is_B = 1'b1; SB_ALU=1; LB=1;
       end
 
-      // ======== DMEM: LOAD / STORE / ADD ========
+      // LOAD / STORE / ADD
       OP_MOV_A_DIR: begin      // MOV A, (dir)
         selOtherA = 2'b10;    
         SA = 1'b0; LA = 1'b1;
@@ -332,7 +305,7 @@ module computer(
         SB_ALU=1; LB=1;
       end
 
-      // ======== CMP + SALTOS ========
+      //CMP
       OP_CMP_AB: begin         
       end
 
@@ -341,7 +314,7 @@ module computer(
       end
 
       OP_JEQ: begin
-        take_jump = Zr;        // salta si último resultado fue Z=1
+        take_jump = Zr;
       end
 
       default: ;

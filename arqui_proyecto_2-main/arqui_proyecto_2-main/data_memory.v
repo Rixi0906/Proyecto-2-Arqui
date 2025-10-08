@@ -12,9 +12,7 @@ module data_memory #(
   
   reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];
 
-  // Lectura combinacional 
   assign dout = mem[addr];
 
-  // Escritura en flanco 
   always @(posedge clk) if (we) mem[addr] <= din;
 endmodule
