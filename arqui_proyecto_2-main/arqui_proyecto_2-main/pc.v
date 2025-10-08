@@ -1,9 +1,12 @@
-module pc #(parameter WIDTH = 8) (
+// pc.v
+module pc
+#(parameter WIDTH = 8)
+(
   input                  clk,
-  output reg [WIDTH-1:0] pc
+  input  [WIDTH-1:0]     next_pc,   // <--- NUEVO puerto
+  output reg [WIDTH-1:0] pc = {WIDTH{1'b0}}
 );
-  initial pc = {WIDTH{1'b0}};
   always @(posedge clk) begin
-    pc <= pc + 1'b1;     
+    pc <= next_pc;        // carga el siguiente PC (para JMP/JEQ)
   end
 endmodule
