@@ -1,7 +1,5 @@
-# ==== Fuentes ====
 VERILOG_FILES = alu.v mux2.v register.v pc.v instruction_memory.v data_memory.v computer.v
 
-# Usa TB para elegir testbench (por defecto el normal)
 TB ?= testbench.v
 TESTBENCH_FILE = $(TB)
 

@@ -1,7 +1,6 @@
-// ALU.v — ampliada con opcodes de memoria y CMP
 module ALU (
-    input  [7:0] A,    // Operando A de la ALU (fuente elegida por control)
-    input  [7:0] B,    // Operando B de la ALU (reg/literal/DMEM según control)
+    input  [7:0] A,    
+    input  [7:0] B,    
     input  [6:0] opcode,
     output reg [7:0] R,
     output reg Z,
@@ -10,14 +9,11 @@ module ALU (
     output reg V
 );
 
-  // ======= OPCODES EXTRA (ajústalos si tu decoder usa otros) =======
   // ADD con memoria
-  localparam [6:0] OP_ADD_A_DIR = 7'b0101100;  // A := A + DM[dir]
-  localparam [6:0] OP_ADD_B_DIR = 7'b0101101;  // B := B + DM[dir] (si lo usas)
-  // CMP (setea flags con A-B, sin writeback en el decoder)
+  localparam [6:0] OP_ADD_A_DIR = 7'b0101100;  
+  localparam [6:0] OP_ADD_B_DIR = 7'b0101101;  
+  // CMP 
   localparam [6:0] OP_CMP_AB    = 7'b1001101;  // CMP A,B
-
-  // ================================================================
 
   wire [8:0] SUM  = {1'b0, A} + {1'b0, B};
   wire [8:0] DIFF = {1'b0, A} - {1'b0, B};
@@ -31,16 +27,15 @@ module ALU (
       7'b0000100, 7'b0000101, 7'b0000110, 7'b0000111,
       OP_ADD_A_DIR, OP_ADD_B_DIR: begin
         {C, R} = SUM;                          // C = carry
-        V = (A[7] == B[7]) && (R[7] != A[7]);  // overflow suma
+        V = (A[7] == B[7]) && (R[7] != A[7]);  
       end
 
-      // ----------------- SUB (A - B) ----------
       // Básicos: A,B / B,A / A,lit / B,lit  +  CMP A,B
       7'b0001000, 7'b0001001, 7'b0001010, 7'b0001011,
       OP_CMP_AB: begin
         R = DIFF[7:0];
-        C = DIFF[8];                           // C=1 => no hubo borrow
-        V = (A[7] != B[7]) && (R[7] != A[7]);  // overflow resta
+        C = DIFF[8];                           
+        V = (A[7] != B[7]) && (R[7] != A[7]);  
       end
 
       // ----------------- AND ------------------
@@ -66,7 +61,7 @@ module ALU (
       // Para INC B, el decoder debe poner A = B (selA_is_B=1)
       7'b0100100: begin
         {C, R} = {1'b0, A} + 9'd1;
-        V = (A[7] == 1'b0) && (R[7] == 1'b1); // overflow de +1 (127->128)
+        V = (A[7] == 1'b0) && (R[7] == 1'b1); 
       end
 
       default: begin
@@ -79,4 +74,4 @@ module ALU (
     N = R[7];
   end
 endmodule
-// ----------------- End of ALU -----------------
+// ----------------- End ALU -----------------
