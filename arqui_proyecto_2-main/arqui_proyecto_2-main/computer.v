@@ -1,94 +1,64 @@
+
 module computer(
   input        clk,
   output [7:0] alu_out_bus
 );
 
-  //  Señales internas
-
+  // ===== Señales básicas =====
   wire [7:0]  pc_out_bus;
   wire [14:0] im_out_bus;
-  wire [6:0]  opcode;
-  wire [7:0]  lit;
 
-  wire [7:0] regA_out_bus, regB_out_bus;
+  wire [6:0]  opcode = im_out_bus[14:8];
+  wire [7:0]  lit    = im_out_bus[7:0];
 
-  // ---- ALU inputs seleccionables ----
- 
-  reg        selA_is_B;
+  // ===== Registros generales =====
+  wire [7:0]  regA_out_bus, regB_out_bus;
 
-  reg  [1:0] selB;
+  // ===== Instruction memory & PC =====
+  reg  [7:0] next_pc;
 
-  wire [7:0] aluA_in = selA_is_B ? regB_out_bus : regA_out_bus;
-  wire [7:0] aluB_in =
-      (selB==2'b11) ? dmem_dout :
-      (selB==2'b10) ? lit :
-      (selB==2'b01) ? regA_out_bus :
-                      regB_out_bus;
-
-  // ---- Rutas de carga a A y B ----
-  wire [7:0] path_ALU_to_A;
-  wire [7:0] path_to_A;
-
-
-  reg  [1:0] selOtherA;
-  wire [7:0] other_to_A =
-      (selOtherA==2'b10) ? dmem_dout :
-      (selOtherA==2'b01) ? lit :
-                           regB_out_bus;
-
-  reg  [1:0] selWriteB;
-
-  wire [7:0] path_mov_to_B_old = SB ? lit : regA_out_bus;
-  wire [7:0] path_to_B_old     = SB_ALU ? alu_out_bus : path_mov_to_B_old;
-
-  wire [7:0] path_to_B =
-      (selWriteB==2'b00) ? path_to_B_old :
-      (selWriteB==2'b01) ? regA_out_bus  :
-      (selWriteB==2'b10) ? lit           :
-                           dmem_dout;
-
-  // Flags ALU 
-  wire Z, N, C, V;
-  reg  Zr, Nr, Cr, Vr;
-
-  // Control
-  reg  LA, LB;         
-  reg  SA;             
-  reg  SB;             
-  reg  SB_ALU;         
-
-  //  PC e instrucción
-
-  // next PC para JMP/JEQ (usa pc.v con next_pc)
-  wire [7:0] pc_plus1   = pc_out_bus + 8'd1;
-  reg        take_jump;
-  wire [7:0] jump_target = lit;   
-  wire [7:0] pc_next     = take_jump ? jump_target : pc_plus1;
-
-  pc #(.WIDTH(8)) pc_inst(
-    .clk(clk),
-    .next_pc(pc_next),
-    .pc(pc_out_bus)
+  pc #(8) PC0(
+    .clk     (clk),
+    .next_pc (next_pc),
+    .pc      (pc_out_bus)
   );
 
   instruction_memory IM(
-    .address(pc_out_bus),
-    .out(im_out_bus)
+    .address (pc_out_bus),
+    .out     (im_out_bus)
   );
 
-  assign opcode = im_out_bus[14:8];
-  assign lit    = im_out_bus[7:0];
+  // ===== Reg A y B =====
+  reg        loadA, loadB;
+  reg  [7:0] path_to_A, path_to_B;
 
+  register regA(
+    .clk  (clk),
+    .data (path_to_A),
+    .load (loadA),
+    .out  (regA_out_bus)
+  );
 
-  //  Data Memory (DM) 
+  register regB(
+    .clk  (clk),
+    .data (path_to_B),
+    .load (loadB),
+    .out  (regB_out_bus)
+  );
 
-  reg         dmem_we;   
-  wire [7:0]  dmem_addr = lit;     
-  wire [7:0]  dmem_din;
-  wire [7:0]  dmem_dout;
+  // ===== Data memory =====
+  reg        dmem_we;
+  reg  [7:0] dmem_addr;        // MUX: lit (directo) o regB (indirecto)
+  wire [7:0] dmem_dout;
 
-  reg         dmem_src_is_A;       
-  assign dmem_din = dmem_src_is_A ? regA_out_bus : regB_out_bus;
+  // Fuente de datos para escribir en memoria:
+  // 00 -> A, 01 -> B, 10 -> ALU, 11 -> 0
+  reg  [1:0] dmem_src_sel;
+  wire [7:0] dmem_din =
+    (dmem_src_sel==2'b00) ? regA_out_bus :
+    (dmem_src_sel==2'b01) ? regB_out_bus :
+    (dmem_src_sel==2'b10) ? alu_out_bus  :
+                            8'h00;
 
   data_memory DM(
     .clk (clk),
@@ -98,253 +68,232 @@ module computer(
     .dout(dmem_dout)
   );
 
-  //  Mux A y registros
+  // ===== ALU =====
+  // A_input selector: 0->regA, 1->regB
+  reg        selA_is_B;
+  // B_input selector:
+  // 00->regB, 01->regA, 10->lit, 11->DM[dmem_addr]
+  reg  [1:0] selB_src;
 
-  assign path_ALU_to_A = alu_out_bus;
-  assign path_to_A     = SA ? path_ALU_to_A : other_to_A;
+  wire [7:0] aluA_in = selA_is_B ? regB_out_bus : regA_out_bus;
+  wire [7:0] aluB_in = (selB_src==2'd0) ? regB_out_bus :
+                       (selB_src==2'd1) ? regA_out_bus :
+                       (selB_src==2'd2) ? lit          :
+                                          dmem_dout;
 
-  register regA(
-    .clk(clk),
-    .data(path_to_A),
-    .load(LA),
-    .out(regA_out_bus)
+  wire [7:0] alu_R;
+  wire       Zr, Nr, Cr, Vr;
+
+  ALU alu0(
+    .A      (aluA_in),
+    .B      (aluB_in),
+    .opcode (opcode),
+    .R      (alu_R),
+    .Z      (Zr),
+    .N      (Nr),
+    .C      (Cr),
+    .V      (Vr)
   );
 
-  register regB(
-    .clk(clk),
-    .data(path_to_B),
-    .load(LB),
-    .out(regB_out_bus)
-  );
+  assign alu_out_bus = alu_R; // para debug/TB
 
-
-  //  ALU
-
-  ALU alu(
-    .A(aluA_in),
-    .B(aluB_in),
-    .opcode(opcode),
-    .R(alu_out_bus),
-    .Z(Z), .N(N), .C(C), .V(V)
-  );
-
-  // Registrar flags para saltos condicionales 
-  always @(posedge clk) begin
-    Zr <= Z; Nr <= N; Cr <= C; Vr <= V;
-  end
-
-
-  //  OpCodes (ajusta si usas otros)
-
+  // ===== OPCODES (ajusta si tu pauta usa otros códigos) =====
   localparam [6:0]
-    // DMEM directos
-    OP_MOV_A_DIR  = 7'b0100101,   
-    OP_MOV_B_DIR  = 7'b0100110,   
-    OP_MOV_DIR_A  = 7'b0100111,   
-    OP_MOV_DIR_B  = 7'b0101000,   
-    // Aritmética con memoria
-    OP_ADD_A_DIR  = 7'b0101100,   
-    OP_ADD_B_DIR  = 7'b0101101,   
-    // Comparación y saltos
-    OP_CMP_AB     = 7'b1001101,   
-    OP_JMP        = 7'b1010000,   
-    OP_JEQ        = 7'b1010100;   
+    OP_MOV_A_L      = 7'b0000010,
+    OP_MOV_B_L      = 7'b0000011,
 
+    OP_MOV_A_DIR    = 7'b0100101,  // A <- DM[lit]
+    OP_MOV_B_DIR    = 7'b0100110,  // B <- DM[lit]
+    OP_MOV_DIR_A    = 7'b0100111,  // DM[lit] <- A
+    OP_MOV_DIR_B    = 7'b0101000,  // DM[lit] <- B
+    OP_MOV_BPTR_A   = 7'b0101011,  // DM[B]   <- A
 
-  //  Unidad de Control
+    OP_ADD_A_DIR    = 7'b0101100,  // A <- A + DM[lit]
+    OP_SUB_DIR      = 7'b0110011,  // DM[lit] <- A - B
+
+    OP_AND_A_PTRB   = 7'b0110110,  // A <- A & DM[B]
+    OP_OR_B_DIR     = 7'b0111001,  // B <- B | DM[lit]
+    OP_XOR_A_DIR    = 7'b0111111,  // A <- A ^ DM[lit]
+    OP_NOT_PTRB     = 7'b0111110,  // DM[B] <- ~A
+
+    OP_SHL_DIR_B    = 7'b1000100,  // DM[lit] <- B << 1
+    OP_SHR_PTRB     = 7'b1001000,  // DM[B]   <- A >> 1
+
+    OP_INC_DIR      = 7'b1001001,  // DM[lit] <- DM[lit] + 1
+    OP_RST_PTRB     = 7'b1001100,  // DM[B]   <- 0
+
+    OP_CMP_A_PTRB   = 7'b1010010,  // flags por (A - DM[B])
+    OP_CMP_B_ZERO   = 7'b1001111,  // flags por (B - 0)
+ 
+    OP_JMP          = 7'b1010000,  // PC <- lit
+    OP_JMP_2        = 7'b1010011,  // PC <- lit  (segunda variante usada en im.dat)
+
+    OP_JLE          = 7'b1011001,  // if Z || (N!=V)
+    OP_JGEZ_B       = 7'b1011000,  // if B>=0 (usando CMP_B_ZERO)
+
+    OP_SUB_B_1      = 7'b0001011;  // B <- B - 1
+
+  // ===== Control =====
+  reg take_jump;
 
   always @* begin
     // Defaults seguros
-    LA=0; LB=0;
-    SA=0; SB=0; SB_ALU=0;
-    selA_is_B=0; selB=2'b00;
-    selOtherA = 2'b00;
-    selWriteB = 2'b00;
-    dmem_we=0; dmem_src_is_A=0;
-    take_jump=0;
+    next_pc       = pc_out_bus + 8'd1;
+    take_jump     = 1'b0;
+
+    selA_is_B     = 1'b0;
+    selB_src      = 2'd0;
+
+    loadA         = 1'b0;
+    loadB         = 1'b0;
+
+    path_to_A     = alu_R;
+    path_to_B     = alu_R;
+
+    dmem_we       = 1'b0;
+    dmem_addr     = lit;       // por defecto direccion directa
+    dmem_src_sel  = 2'b00;     // por defecto A (si se escribe)
 
     case (opcode)
+      // ---------------- MOV inmediatos ----------------
+      OP_MOV_A_L: begin path_to_A = lit; loadA = 1'b1; end
+      OP_MOV_B_L: begin path_to_B = lit; loadB = 1'b1; end
 
-      // ===== MOV =====
-      7'b0000010: begin // MOV A, Lit
-        selOtherA = 2'b01; // lit
-        SA = 1'b0; LA = 1'b1;
-      end
-      7'b0000011: begin // MOV B, Lit
-        // esquema legado
-        SB = 1'b1; LB = 1'b1;
-      end
-      7'b0000000: begin // MOV A, B
-        selOtherA = 2'b00; // B
-        SA = 1'b0; LA = 1'b1;
-      end
-      7'b0000001: begin // MOV B, A
-        // esquema legado
-        SB = 1'b0; LB = 1'b1;
-      end
+      // ------------- MOV con memoria (directo) -------------
+      OP_MOV_A_DIR: begin dmem_addr = lit; path_to_A = dmem_dout; loadA = 1'b1; end
+      OP_MOV_B_DIR: begin dmem_addr = lit; path_to_B = dmem_dout; loadB = 1'b1; end
+      OP_MOV_DIR_A: begin dmem_addr = lit; dmem_we = 1'b1; dmem_src_sel = 2'b00; end // A -> DM
+      OP_MOV_DIR_B: begin dmem_addr = lit; dmem_we = 1'b1; dmem_src_sel = 2'b01; end // B -> DM
+      OP_MOV_BPTR_A:begin dmem_addr = regB_out_bus; dmem_we = 1'b1; dmem_src_sel = 2'b00; end
 
-      // ===== ADD =====
-      7'b0000100: begin // ADD A, B  -> A=A+B
-        selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
-      end
-      7'b0000101: begin // ADD B, A  -> B=A+B
-        selA_is_B = 1'b0; selB = 2'b00; SB_ALU=1; LB=1;
-      end
-      7'b0000110: begin // ADD A, Lit
-        selA_is_B = 1'b0; selB = 2'b10; SA=1; LA=1;
-      end
-      7'b0000111: begin // ADD B, Lit
-        selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
+      // ------------- Aritmética / Lógicas -------------
+      // A <- A + DM[lit]
+      OP_ADD_A_DIR: begin
+        dmem_addr = lit;
+        selA_is_B = 1'b0;          // A_input = A
+        selB_src  = 2'd3;          // B_input = DM[lit]
+        loadA     = 1'b1;          // escribe A con alu_R
       end
 
-      // ===== SUB =====
-      7'b0001000: begin // SUB A, B
-        selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
-      end
-      7'b0001001: begin // SUB B, A  (B := A - B)
-        selA_is_B = 1'b0; selB = 2'b00; SB_ALU=1; LB=1;
-      end
-      7'b0001010: begin // SUB A, Lit
-        selA_is_B = 1'b0; selB = 2'b10; SA=1; LA=1;
-      end
-      7'b0001011: begin // SUB B, Lit
-        selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
+      // DM[lit] <- A - B
+      OP_SUB_DIR: begin
+        selA_is_B = 1'b0;          // A_input = A
+        selB_src  = 2'd0;          // B_input = B
+        dmem_addr = lit;
+        dmem_we   = 1'b1;
+        dmem_src_sel = 2'b10;      // ALU -> DM
       end
 
-      // ===== AND =====
-      7'b0001100: begin // AND A, B
-        selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
-      end
-      7'b0001101: begin // AND B, A
-        selA_is_B = 1'b0; selB = 2'b00; SB_ALU=1; LB=1;
-      end
-      7'b0001110: begin // AND A, Lit
-        selA_is_B = 1'b0; selB = 2'b10; SA=1; LA=1;
-      end
-      7'b0001111: begin // AND B, Lit
-        selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
+      // A <- A & DM[B]
+      OP_AND_A_PTRB: begin
+        dmem_addr = regB_out_bus;  // direccion indirecta
+        selA_is_B = 1'b0;          // A_input = A
+        selB_src  = 2'd3;          // B_input = DM[B]
+        loadA     = 1'b1;
       end
 
-      // ===== OR =====
-      7'b0010000: begin // OR A, B
-        selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
-      end
-      7'b0010001: begin // OR B, A
-        selA_is_B = 1'b0; selB = 2'b00; SB_ALU=1; LB=1;
-      end
-      7'b0010010: begin // OR A, Lit
-        selA_is_B = 1'b0; selB = 2'b10; SA=1; LA=1;
-      end
-      7'b0010011: begin // OR B, Lit
-        selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
+      // B <- B | DM[lit]
+      OP_OR_B_DIR: begin
+        dmem_addr = lit;
+        selA_is_B = 1'b1;          // A_input = B
+        selB_src  = 2'd3;          // B_input = DM[lit]
+        loadB     = 1'b1;
       end
 
-      // ===== NOT =====
-      7'b0010100: begin // NOT A, A
-        selA_is_B = 1'b0; SA=1; LA=1;
-      end
-      7'b0010101: begin // NOT A, B
-        selA_is_B = 1'b1; SA=1; LA=1;
-      end
-      7'b0010110: begin // NOT B, A
-        selA_is_B = 1'b0; SB_ALU=1; LB=1;
-      end
-      7'b0010111: begin // NOT B, B
-        selA_is_B = 1'b1; SB_ALU=1; LB=1;
+      // A <- A ^ DM[lit]
+      OP_XOR_A_DIR: begin
+        dmem_addr = lit;
+        selA_is_B = 1'b0;          // A_input = A
+        selB_src  = 2'd3;          // B_input = DM[lit]
+        loadA     = 1'b1;
       end
 
-      // ===== XOR =====
-      7'b0011000: begin // XOR A, B
-        selA_is_B = 1'b0; selB = 2'b00; SA=1; LA=1;
-      end
-      7'b0011001: begin // XOR B, A
-        selA_is_B = 1'b0; selB = 2'b00; SB_ALU=1; LB=1;
-      end
-      7'b0011010: begin // XOR A, Lit
-        selA_is_B = 1'b0; selB = 2'b10; SA=1; LA=1;
-      end
-      7'b0011011: begin // XOR B, Lit
-        selA_is_B = 1'b1; selB = 2'b10; SB_ALU=1; LB=1;
+      // DM[B] <- ~A
+      OP_NOT_PTRB: begin
+        selA_is_B = 1'b0;          // A_input = A (ALU hará ~A)
+        dmem_addr = regB_out_bus;
+        dmem_we   = 1'b1;
+        dmem_src_sel = 2'b10;      // ALU -> DM (no A crudo)
       end
 
-      // ===== SHL =====
-      7'b0011100: begin // SHL A, A
-        selA_is_B = 1'b0; SA=1; LA=1;
-      end
-      7'b0011101: begin // SHL A, B
-        selA_is_B = 1'b1; SA=1; LA=1;
-      end
-      7'b0011110: begin // SHL B, A
-        selA_is_B = 1'b0; SB_ALU=1; LB=1;
-      end
-      7'b0011111: begin // SHL B, B
-        selA_is_B = 1'b1; SB_ALU=1; LB=1;
+      // DM[lit] <- B << 1
+      OP_SHL_DIR_B: begin
+        selA_is_B = 1'b1;          // A_input = B (ALU shiftea A_input)
+        dmem_addr = lit;
+        dmem_we   = 1'b1;
+        dmem_src_sel = 2'b10;      // ALU -> DM
       end
 
-      // ===== SHR =====
-      7'b0100000: begin // SHR A, A
-        selA_is_B = 1'b0; SA=1; LA=1;
-      end
-      7'b0100001: begin // SHR A, B
-        selA_is_B = 1'b1; SA=1; LA=1;
-      end
-      7'b0100010: begin // SHR B, A
-        selA_is_B = 1'b0; SB_ALU=1; LB=1;
-      end
-      7'b0100011: begin // SHR B, B
-        selA_is_B = 1'b1; SB_ALU=1; LB=1;
+      // DM[B] <- A >> 1
+      OP_SHR_PTRB: begin
+        selA_is_B = 1'b0;          // A_input = A
+        dmem_addr = regB_out_bus;
+        dmem_we   = 1'b1;
+        dmem_src_sel = 2'b10;      // ALU -> DM
       end
 
-      // ===== INC B =====
-      7'b0100100: begin // INC B
-        selA_is_B = 1'b1; SB_ALU=1; LB=1;
+      // DM[lit] <- DM[lit] + 1
+      OP_INC_DIR: begin
+        dmem_addr = lit;           // leer celda
+        // Para que ALU incremente ese dato:
+        // A_input puede ser B o A; usamos B_input = DM, y ALU implementa +1
+        // Si tu ALU implementa INC usando B como operando, basta con:
+        selA_is_B = 1'b1;          // A_input = B (cómodo según tu ALU)
+        selB_src  = 2'd3;          // B_input = DM[lit]
+        dmem_we   = 1'b1;
+        dmem_src_sel = 2'b10;      // escribir alu_R
       end
 
-      // ======== DMEM: LOAD / STORE / ADD ========
-      OP_MOV_A_DIR: begin      // MOV A, (dir)
-        selOtherA = 2'b10;    
-        SA = 1'b0; LA = 1'b1;
+      // DM[B] <- 0
+      OP_RST_PTRB: begin
+        dmem_addr = regB_out_bus;
+        dmem_we   = 1'b1;
+        dmem_src_sel = 2'b11;      // constante 0
       end
 
-      OP_MOV_B_DIR: begin      // MOV B, (dir)
-        selWriteB = 2'b11;     
-        LB = 1'b1;
+      // --------- Comparaciones y saltos ---------
+      // flags <- (A - DM[B])
+      OP_CMP_A_PTRB: begin
+        dmem_addr = regB_out_bus;
+        selA_is_B = 1'b0;          // A_input = A
+        selB_src  = 2'd3;          // B_input = DM[B]
+        // sin writes (solo flags)
       end
 
-      OP_MOV_DIR_A: begin      // MOV (dir), A
-        dmem_src_is_A = 1'b1;  
-        dmem_we = 1'b1;
+      // flags <- (B - 0)
+      OP_CMP_B_ZERO: begin
+        selA_is_B = 1'b1;          // A_input = B
+        selB_src  = 2'd2;          // B_input = lit (0 si instrucción codifica 0)
       end
 
-      OP_MOV_DIR_B: begin      // MOV (dir), B
-        dmem_src_is_A = 1'b0;  
-        dmem_we = 1'b1;
+
+      OP_JMP,
+      OP_JMP_2: begin
+        take_jump = 1'b1;
       end
 
-      OP_ADD_A_DIR: begin      // A := A + DM[dir]
-        selB = 2'b11;        
-        selA_is_B = 1'b0; SA=1; LA=1;
+
+      // JLE: Z || (N != V)
+      OP_JLE: begin
+        take_jump = (Zr || (Nr != Vr));
       end
 
-      OP_ADD_B_DIR: begin      // B := B + DM[dir] 
-        selB = 2'b11;         
-        selA_is_B = 1'b1;      // A de ALU = B 
-        SB_ALU=1; LB=1;
+      // “JGEZ B”: tras CMP_B_ZERO, B>=0 equivale a N==0
+      OP_JGEZ_B: begin
+        take_jump = (Nr == 1'b0);
       end
 
-      // ======== CMP + SALTOS ========
-      OP_CMP_AB: begin         
+      // B <- B - 1
+      OP_SUB_B_1: begin
+        selA_is_B = 1'b1;          // A_input = B
+        selB_src  = 2'd2;          // B_input = lit (=1 en tu ALU para dec)
+        loadB     = 1'b1;
       end
 
-      OP_JMP: begin
-        take_jump = 1'b1;      // pc_next = lit
-      end
-
-      OP_JEQ: begin
-        take_jump = Zr;        // salta si último resultado fue Z=1
-      end
-
-      default: ;
+      default: ; // NOP
     endcase
+
+    if (take_jump) next_pc = lit;
   end
+
 endmodule

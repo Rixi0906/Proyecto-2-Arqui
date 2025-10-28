@@ -1,20 +1,20 @@
-module data_memory #(
-  parameter ADDR_WIDTH = 8,
-  parameter DATA_WIDTH = 8,
-  parameter DEPTH      = 1 << ADDR_WIDTH
-)(
-  input                       clk,
-  input                       we,                     
-  input  [ADDR_WIDTH-1:0]     addr,
-  input  [DATA_WIDTH-1:0]     din,
-  output [DATA_WIDTH-1:0]     dout
+module data_memory(
+  input        clk,
+  input        we,
+  input  [7:0] addr,
+  input  [7:0] din,
+  output [7:0] dout
 );
-  
-  reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];
+  reg [7:0] mem [0:255];
 
-  // Lectura combinacional 
+`ifndef SYNTHESIS
+  // SOLO SIMULACIÓN (si cargas estado inicial, o haces prints)
+  initial begin
+    // $readmemb("dm.dat", mem);  // si usas
+    // $display("DM init...");
+  end
+`endif
+
   assign dout = mem[addr];
-
-  // Escritura en flanco 
   always @(posedge clk) if (we) mem[addr] <= din;
 endmodule
